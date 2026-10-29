@@ -26,7 +26,7 @@ Get-FileHash .\scripts\Get-Windows11HealthReport.ps1, .\scripts\Get-OutlookHealt
 Release files are built by GitHub Actions and attested. With the GitHub CLI:
 
 ```
-gh attestation verify HealthCheck.exe --repo <owner>/<repo>
+gh attestation verify HealthCheck.exe --repo necromater-cyber/Healthcheck-Win11
 ```
 
 This proves the file was produced by this repository's release workflow from the tagged commit.
