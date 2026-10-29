@@ -1,0 +1,55 @@
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - run: go vet ./...
+      - run: GOOS=windows go vet ./...
+      - run: go test ./...
+      - name: Launcher has no third-party modules and no networking packages
+        run: |
+          ! grep -q '^require' go.mod
+          ! grep -nE '"net(/http)?"' *.go
+
+  powershell:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Parse both scripts with the real PowerShell parser
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem scripts\*.ps1, tools\*.ps1 | ForEach-Object {
+            $errs = $null; $tok = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($_.FullName, [ref]$tok, [ref]$errs)
+            if ($errs) { $errs | ForEach-Object { "$($_.Extent.File):$($_.Extent.StartLineNumber): $($_.Message)" }; $bad++ }
+            else { "OK  $($_.Name)" }
+          }
+          if ($bad) { exit 1 }
+      - name: Scripts must stay ASCII-safe for Windows PowerShell 5.1
+        shell: powershell
+        run: |
+          $bad = 0
+          Get-ChildItem scripts\*.ps1 | ForEach-Object {
+            $b = [IO.File]::ReadAllBytes($_.FullName)
+            if (($b | Where-Object { $_ -gt 127 }).Count) { "Non-ASCII bytes in $($_.Name)"; $bad++ }
+          }
+          if ($bad) { exit 1 }
+      - name: Search for state-changing or obfuscation patterns
+        shell: powershell
+        run: |
+          $pat = 'Set-ItemProperty|New-ItemProperty|Remove-ItemProperty|Set-MpPreference|Add-MpPreference|Start-Service|Stop-Service|Restart-Service|Set-Service|Enable-|Disable-|Install-|Uninstall-|Invoke-Expression|FromBase64String|EncodedCommand'
+          $hits = Select-String -Path scripts\*.ps1 -Pattern $pat
+          if ($hits) { $hits | ForEach-Object { $_.ToString() }; exit 1 } else { "No matches." }

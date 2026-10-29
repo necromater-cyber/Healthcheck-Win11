@@ -1,0 +1,46 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write        # create the release
+  id-token: write        # build provenance attestation
+  attestations: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      - run: go test ./...
+      - name: Build
+        env:
+          CGO_ENABLED: '0'
+          GOOS: windows
+          GOARCH: amd64
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          DATE="$(date -u +%Y-%m-%d)"
+          mkdir dist
+          go build -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.buildDate=${DATE}" -o dist/HealthCheck.exe .
+          cp scripts/*.ps1 dist/
+          (cd dist && sha256sum HealthCheck.exe Get-Windows11HealthReport.ps1 Get-OutlookHealthReport.ps1 > SHA256SUMS.txt)
+          { echo "Built by GitHub Actions from ${GITHUB_SHA}"; go version; } > dist/BUILD-INFO.txt
+          cat dist/SHA256SUMS.txt
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/HealthCheck.exe
+            dist/Get-Windows11HealthReport.ps1
+            dist/Get-OutlookHealthReport.ps1
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" \
+            --notes "Unsigned build. Verify with docs/VERIFY.md. SHA-256 values are in SHA256SUMS.txt. Toolchain recorded in BUILD-INFO.txt."

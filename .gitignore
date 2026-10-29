@@ -1,0 +1,9 @@
+HealthCheck.exe
+*.exe
+dist/
+*.pfx
+*.p12
+*.snk
+HealthCheck-*.md
+WindowsHealthReport_*.md
+OutlookHealthReport_*.md
