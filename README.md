@@ -12,7 +12,7 @@ run them directly, or build the exe yourself.
 | --- | --- | --- |
 | Windows 11 collector (36 sections) | [`scripts/Get-Windows11HealthReport.ps1`](scripts/Get-Windows11HealthReport.ps1) | 2.5 |
 | Outlook slowness collector (12 sections) | [`scripts/Get-OutlookHealthReport.ps1`](scripts/Get-OutlookHealthReport.ps1) | 1.3 |
-| Launcher (menu, progress UI, elevation) | [`main.go`](main.go), [`ui.go`](ui.go), `platform_*.go` | 1.3.0 |
+| Launcher (menu, progress UI, elevation, redaction) | [`main.go`](main.go), [`ui.go`](ui.go), [`redact.go`](redact.go), `platform_*.go` | 1.4.0 |
 
 ## Three ways to use it, from least to most trust required
 
@@ -43,7 +43,7 @@ Run `HealthCheck.exe` and pick **1** Windows check, **2** Outlook check or **3**
 ```
 HealthCheck windows --copilot
 HealthCheck outlook --deep-folder-scan --endpoint mail.contoso.com
-HealthCheck all --copilot
+HealthCheck all --copilot --redact
 HealthCheck version      (prints the SHA-256 of each embedded script)
 ```
 
@@ -55,7 +55,12 @@ and say "Analyse these diagnostic files."
 
 A report contains the hostname, usernames, serial numbers, IP addresses, file paths, installed software and
 parts of event-log messages. Read it first and remove anything you should not share. Use your organisation's
-approved AI service. A redaction option is planned.
+approved AI service.
+
+The menu asks **"Redact identifying details?"** (default yes), and the command line has `--redact`. It replaces
+host and user names, IP and MAC addresses, e-mails, domain SIDs and serial numbers with placeholders such as
+`HOST-1` and `IP-PRIV-2`, and saves a private map so you can translate findings back. It is best-effort: see
+[docs/REDACTION.md](docs/REDACTION.md) for what it does and does not catch.
 
 ## Antivirus warnings
 

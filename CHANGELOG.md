@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0 - 2026-10-30
+- New **redaction** option (`--redact`, and a menu question that defaults to yes). After a run the launcher replaces
+  host and user names, domains, e-mails, domain SIDs, IPv4/IPv6 and MAC addresses, serial numbers and
+  `OneDrive - <organisation>` names with stable placeholders, renames files that contain the host name, and saves a
+  private `DO-NOT-UPLOAD_redaction-map_*.txt`. Best-effort; see docs/REDACTION.md.
+- Redaction is done in the launcher only. The PowerShell scripts are unchanged.
+
 ## 1.3.0 - 2026-10-29
 - Started as Administrator and chose the Outlook check (or "Both")? The launcher now explains that an
   elevated window cannot reach Outlook and offers to open the Outlook check in a normal window.

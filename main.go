@@ -53,7 +53,7 @@ type winOpts struct {
 	days, maxPartKB, maxUptime int
 	out, verbosity             string
 	split, integrity, battery  bool
-	copilot                    bool
+	copilot, redact            bool
 	yesElevate, noElevate      bool
 	raw                        []string
 }
@@ -62,7 +62,7 @@ type olOpts struct {
 	days, warn, action int
 	out                string
 	deep               bool
-	deelevated         bool
+	deelevated, redact bool
 	endpoints          stringList
 	raw                []string
 }
@@ -71,6 +71,7 @@ type allOpts struct {
 	days       int
 	out        string
 	copilot    bool
+	redact     bool
 	noElevate  bool
 	yesElevate bool
 }
@@ -100,6 +101,7 @@ func winFlags(fs *flag.FlagSet, o *winOpts) {
 	fs.BoolVar(&o.integrity, "integrity", false, "also run DISM / SFC read-only integrity checks (slow)")
 	fs.BoolVar(&o.battery, "battery", false, "also produce a battery report (laptops)")
 	fs.BoolVar(&o.copilot, "copilot", false, "preset for chat-assistant upload: compact + split into at most 3 parts (Copilot upload limit), 3-day window")
+	fs.BoolVar(&o.redact, "redact", false, "replace host/user names, IPs, MACs, e-mails and serials in the finished report with placeholders")
 	fs.BoolVar(&o.yesElevate, "elevate", false, "relaunch as Administrator without asking")
 	fs.BoolVar(&o.noElevate, "no-elevate", false, "never offer to relaunch as Administrator")
 }
@@ -107,6 +109,7 @@ func winFlags(fs *flag.FlagSet, o *winOpts) {
 func olFlags(fs *flag.FlagSet, o *olOpts) {
 	fs.IntVar(&o.days, "days", 0, "event log lookback in days, 1-90 (script default 14)")
 	fs.StringVar(&o.out, "out", "", "output folder (default: Desktop)")
+	fs.BoolVar(&o.redact, "redact", false, "replace host/user names, IPs, MACs, e-mails and serials in the finished report with placeholders")
 	fs.BoolVar(&o.deelevated, "deelevated", false, "internal: set when relaunched without administrator rights")
 	fs.BoolVar(&o.deep, "deep-folder-scan", false, "scan all stores and deeper subfolders (slower)")
 	fs.Var(&o.endpoints, "endpoint", "extra host to test, e.g. on-prem Exchange/Autodiscover (repeatable)")
@@ -188,6 +191,7 @@ func parseAll(args []string) (allOpts, error) {
 	fs.IntVar(&o.days, "days", 0, "lookback in days, applied to both checks (1-90)")
 	fs.StringVar(&o.out, "out", "", "output folder (default: Desktop)")
 	fs.BoolVar(&o.copilot, "copilot", false, "compact + split preset for the Windows report")
+	fs.BoolVar(&o.redact, "redact", false, "replace identifying details in both reports with placeholders")
 	fs.BoolVar(&o.yesElevate, "elevate", false, "relaunch the Windows check as Administrator without asking")
 	fs.BoolVar(&o.noElevate, "no-elevate", false, "never offer to relaunch as Administrator")
 	if err := fs.Parse(args); err != nil {
@@ -408,7 +412,10 @@ func cmdWindows(args []string) int {
 	fmt.Println("Running the Windows 11 health collector...")
 	t0 := time.Now()
 	code, paths, rerr := runScript(winScriptName, windowsScript, buildWindowsArgs(o))
-	return printSummary("Windows 11 health check", code, paths, rerr, time.Since(t0))
+	paths, note := applyRedaction(o.redact && rerr == nil && code == 0, paths)
+	rc := printSummary("Windows 11 health check", code, paths, rerr, time.Since(t0))
+	note()
+	return rc
 }
 
 func cmdOutlook(args []string) int {
@@ -446,7 +453,10 @@ func cmdOutlook(args []string) int {
 	fmt.Println("Running the Outlook health collector...")
 	t0 := time.Now()
 	code, paths, rerr := runScript(olScriptName, outlookScript, buildOutlookArgs(o))
-	return printSummary("Outlook health check", code, paths, rerr, time.Since(t0))
+	paths, note := applyRedaction(o.redact && rerr == nil && code == 0, paths)
+	rc := printSummary("Outlook health check", code, paths, rerr, time.Since(t0))
+	note()
+	return rc
 }
 
 func cmdAll(args []string) int {
@@ -462,6 +472,9 @@ func cmdAll(args []string) int {
 		if o.out != "" {
 			oa = append(oa, "--out", o.out)
 		}
+		if o.redact {
+			oa = append(oa, "--redact")
+		}
 		if offerNormalWindow(oa, true) == offerCancel {
 			return 1
 		}
@@ -476,6 +489,9 @@ func cmdAll(args []string) int {
 	}
 	if o.out != "" {
 		oa = append(oa, "--out", o.out)
+	}
+	if o.redact {
+		oa = append(oa, "--redact")
 	}
 	rc := cmdOutlook(oa)
 	fmt.Println()
@@ -501,6 +517,9 @@ func appendCommon(a []string, o allOpts) []string {
 	}
 	if o.copilot {
 		a = append(a, "--copilot")
+	}
+	if o.redact {
+		a = append(a, "--redact")
 	}
 	return a
 }
@@ -544,6 +563,7 @@ WINDOWS FLAGS
   --max-uptime-days N   restart-cadence policy, 1-90 (default 7)
   --integrity           add DISM / SFC read-only integrity checks (5-20 min)
   --battery             add battery report (laptops)
+  --redact              replace host/user names, IPs, MACs, e-mails and serials with placeholders (map saved privately)
   --out DIR             output folder (default: Desktop)
   --elevate | --no-elevate   skip the prompt: always / never relaunch as Administrator
 
@@ -553,6 +573,7 @@ OUTLOOK FLAGS
   --endpoint HOST       extra host to test, e.g. on-prem Exchange (repeatable)
   --folder-warn N / --folder-action N    folder item-count thresholds
   --out DIR             output folder (default: Desktop)
+  --redact              replace identifying details with placeholders (map saved privately)
 
 Anything after a bare "--" is passed straight to the PowerShell script.
 Reports contain hostnames, usernames, paths and installed software: review before sharing.
@@ -618,6 +639,7 @@ func menu() int {
 			if askYN("Optimise report size for chat-assistant (Copilot) upload?", true) {
 				a = append(a, "--copilot")
 			}
+			a = askRedact(a)
 			return cmdWindows(a)
 		case "2":
 			var a []string
@@ -627,12 +649,14 @@ func menu() int {
 			if ep := ask("Extra Exchange/Autodiscover host to test (blank = none)", ""); ep != "" {
 				a = append(a, "--endpoint", ep)
 			}
+			a = askRedact(a)
 			return cmdOutlook(a)
 		case "3":
 			var a []string
 			if askYN("Optimise the Windows report for chat-assistant upload?", true) {
 				a = append(a, "--copilot")
 			}
+			a = askRedact(a)
 			return cmdAll(a)
 		case "q", "quit", "exit":
 			return 0
@@ -734,5 +758,45 @@ func offerNormalWindow(outlookArgs []string, both bool) offerResult {
 			return offerCancel
 		}
 		fmt.Println("Please enter 1, 2 or Q.")
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Redaction (see redact.go)
+// ---------------------------------------------------------------------------
+
+// askRedact offers the redaction option in the menu. It defaults to yes: a report that is shared
+// with an outside service should not carry host names, user names, addresses or serial numbers.
+func askRedact(a []string) []string {
+	fmt.Println(dim("  Redaction replaces host/user names, IP and MAC addresses, e-mails and serial numbers with"))
+	fmt.Println(dim("  placeholders (HOST-1, IP-PRIV-1...). A private map file is saved so you can translate back."))
+	if askYN("Redact identifying details before you share the report?", true) {
+		a = append(a, "--redact")
+	}
+	return a
+}
+
+// applyRedaction rewrites the reports when on is true. It returns the (possibly renamed) report paths and
+// a function that prints what happened; callers print it after the summary panel so it is not scrolled away.
+func applyRedaction(on bool, paths []string) ([]string, func()) {
+	nothing := func() {}
+	if !on || len(paths) == 0 {
+		return paths, nothing
+	}
+	stamp := time.Now().Format("20060102-150405")
+	np, mapPath, summary, err := redactFiles(paths, identityFromEnv(), stamp)
+	if err != nil {
+		return paths, func() {
+			fmt.Println()
+			fmt.Println(red(glyph("✖", "[x]")) + " " + bold("Redaction failed: ") + err.Error())
+			fmt.Println(yellow("  The reports were NOT redacted. Do not share them until you have reviewed or redacted them."))
+		}
+	}
+	return np, func() {
+		fmt.Println()
+		fmt.Println(green(glyph("✔", "[ok]")) + " " + bold("Redacted: ") + summary)
+		fmt.Println("  Map of placeholders to real values: " + mapPath)
+		fmt.Println(yellow("  Keep that map file private. Do NOT upload it."))
+		fmt.Println(dim("  Redaction is best-effort. Skim the report for other names (colleagues, projects) before sharing."))
 	}
 }

@@ -17,6 +17,12 @@ the code has moved.
 
 The launcher imports no networking package and makes no network connections of its own.
 
+**Redaction (only with `--redact` or when you answer yes in the menu).** After the collector finishes, `redact.go`
+reads the report files it just wrote, writes redacted copies (renaming files that contain the host name), deletes
+the unredacted originals, and writes `DO-NOT-UPLOAD_redaction-map_<timestamp>.txt` next to them. It reads the
+environment variables `COMPUTERNAME`, `USERNAME`, `USERDOMAIN`, `USERDNSDOMAIN` and `USERPROFILE` to know what to
+replace. See [REDACTION.md](REDACTION.md).
+
 ## 2. External programs the Windows collector runs (all read-only)
 | Command | Purpose |
 | --- | --- |
@@ -57,6 +63,7 @@ paths and sizes. It does not read message bodies or mail contents.
 | `HealthReport_<host>_<timestamp>.md`, or `..._part1of3.md` etc. when split | Desktop or `--out DIR` | The Windows report |
 | `OutlookHealthReport_<host>_<timestamp>.md` | Desktop or `--out DIR` | The report |
 | `BatteryReport_<host>_<timestamp>.html` | Same folder | Only with `-IncludeBatteryReport` |
+| `DO-NOT-UPLOAD_redaction-map_<timestamp>.txt` | Same folder | Only with redaction. Lists the real values behind the placeholders; keep it private |
 | Temp copies of the script and the WFP dump | `%TEMP%` | Deleted when the run ends |
 
 Nothing is written to the registry. Nothing is installed.

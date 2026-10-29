@@ -7,7 +7,7 @@ go test ./...
 set CGO_ENABLED=0
 set GOOS=windows
 set GOARCH=amd64
-go build -trimpath -ldflags "-s -w -X main.version=1.3.0 -X main.buildDate=YYYY-MM-DD" -o HealthCheck.exe .
+go build -trimpath -ldflags "-s -w -X main.version=1.4.0 -X main.buildDate=YYYY-MM-DD" -o HealthCheck.exe .
 ```
 
 On Linux or macOS: `CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build ...` with the same flags.
